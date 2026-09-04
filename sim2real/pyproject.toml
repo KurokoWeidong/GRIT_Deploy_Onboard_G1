@@ -1,0 +1,17 @@
+[project]
+name = "grit-onboard-workstation-teleop"
+version = "0.1.0"
+description = "Workstation-side PICO retargeting for GRIT Deploy Onboard G1"
+requires-python = ">=3.10,<3.11"
+dependencies = [
+  "mink>=1.1.0",
+  "mjviser>=0.0.11",
+  "mujoco",
+  "numpy",
+  "pybind11>=3.0.3",
+  "pyyaml",
+  "pyzmq>=27.1.0",
+]
+
+[tool.uv]
+package = false

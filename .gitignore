@@ -1,0 +1,28 @@
+# Native build output
+g1_sim2real/build/
+CMakeFiles/
+CMakeCache.txt
+cmake_install.cmake
+Makefile
+
+# Runtime output
+logs/
+*.log
+*.pid
+nohup.out
+core
+core.*
+
+# Editor and operating-system files
+.idea/
+.vscode/
+.DS_Store
+*~
+*.swp
+
+# Python cache files that may be created by helper tooling
+__pycache__/
+*.py[cod]
+.pytest_cache/
+sim2real/.venv/
+sim2real/teleop/deps/

@@ -1,0 +1,144 @@
+diff --git a/include/unitree/common/dds/dds_entity.hpp b/include/unitree/common/dds/dds_entity.hpp
+index aee4717..474929d 100644
+--- a/include/unitree/common/dds/dds_entity.hpp
++++ b/include/unitree/common/dds/dds_entity.hpp
+@@ -394,12 +394,36 @@ public:
+ 
+     int64_t GetLastDataAvailableTime() const
+     {
+-        return mListener.GetLastDataAvailableTime();
++        return std::max(mListener.GetLastDataAvailableTime(), mReadLastDataAvailableTime);
++    }
++
++    bool ReadLatest(MSG& message)
++    {
++        ::dds::sub::LoanedSamples<MSG> samples;
++        samples = mNative.take();
++
++        bool hasData = false;
++        typename ::dds::sub::LoanedSamples<MSG>::const_iterator iter;
++        for (iter=samples.begin(); iter<samples.end(); ++iter)
++        {
++            if (iter->info().valid())
++            {
++                message = iter->data();
++                hasData = true;
++            }
++        }
++
++        if (hasData)
++        {
++            mReadLastDataAvailableTime = GetCurrentMonotonicTimeNanosecond();
++        }
++        return hasData;
+     }
+ 
+ private:
+     NATIVE_TYPE mNative;
+     DdsReaderListener<MSG> mListener;
++    int64_t mReadLastDataAvailableTime = 0;
+ };
+ 
+ template<typename MSG>
+diff --git a/include/unitree/common/dds/dds_factory_model.hpp b/include/unitree/common/dds/dds_factory_model.hpp
+index c6330af..5df0136 100644
+--- a/include/unitree/common/dds/dds_factory_model.hpp
++++ b/include/unitree/common/dds/dds_factory_model.hpp
+@@ -39,6 +39,12 @@ public:
+         channelPtr->SetReader(mSubscriber, mReaderQos, cb, queuelen);
+     }
+ 
++    template<typename MSG>
++    void SetReader(DdsTopicChannelPtr<MSG>& channelPtr)
++    {
++        channelPtr->SetReader(mSubscriber, mReaderQos);
++    }
++
+ private:
+     DdsParticipantPtr mParticipant;
+     DdsPublisherPtr mPublisher;
+diff --git a/include/unitree/common/dds/dds_topic_channel.hpp b/include/unitree/common/dds/dds_topic_channel.hpp
+index 4b298ce..74f916e 100644
+--- a/include/unitree/common/dds/dds_topic_channel.hpp
++++ b/include/unitree/common/dds/dds_topic_channel.hpp
+@@ -51,6 +51,11 @@ public:
+         mReader->SetListener(cb, queuelen);
+     }
+ 
++    void SetReader(const DdsSubscriberPtr& subscriber, const DdsReaderQos& qos)
++    {
++        mReader = DdsReaderPtr<MSG>(new DdsReader<MSG>(subscriber, mTopic, qos));
++    }
++
+     DdsWriterPtr<MSG> GetWriter() const
+     {
+         return mWriter;
+@@ -81,6 +86,15 @@ public:
+         return 0;
+     }
+ 
++    bool ReadLatest(MSG& message)
++    {
++        if (mReader)
++        {
++            return mReader->ReadLatest(message);
++        }
++        return false;
++    }
++
+ private:
+     DdsTopicPtr<MSG> mTopic;
+     DdsWriterPtr<MSG> mWriter;
+diff --git a/include/unitree/robot/channel/channel_factory.hpp b/include/unitree/robot/channel/channel_factory.hpp
+index dff1496..912664d 100644
+--- a/include/unitree/robot/channel/channel_factory.hpp
++++ b/include/unitree/robot/channel/channel_factory.hpp
+@@ -44,6 +44,14 @@ public:
+         return channelPtr;
+     }
+ 
++    template<typename MSG>
++    ChannelPtr<MSG> CreateRecvChannel(const std::string& name)
++    {
++        ChannelPtr<MSG> channelPtr = mDdsFactoryPtr->CreateTopicChannel<MSG>(name);
++        mDdsFactoryPtr->SetReader(channelPtr);
++        return channelPtr;
++    }
++
+ public:
+     ~ChannelFactory();
+ 
+diff --git a/include/unitree/robot/channel/channel_subscriber.hpp b/include/unitree/robot/channel/channel_subscriber.hpp
+index 5b260fb..735a18b 100644
+--- a/include/unitree/robot/channel/channel_subscriber.hpp
++++ b/include/unitree/robot/channel/channel_subscriber.hpp
+@@ -35,7 +35,7 @@ public:
+         }
+         else
+         {
+-            UT_THROW(common::CommonException, "subscribe handler is invalid");
++            mChannelPtr = ChannelFactory::Instance()->CreateRecvChannel<MSG>(mChannelName);
+         }
+     }
+ 
+@@ -59,6 +59,20 @@ public:
+         return mChannelName;
+     }
+ 
++    bool ReadLatest(MSG& message)
++    {
++        if (mChannelPtr)
++        {
++            return mChannelPtr->ReadLatest(message);
++        }
++        return false;
++    }
++
++    bool Read(MSG& message)
++    {
++        return ReadLatest(message);
++    }
++
+ private:
+     std::string mChannelName;
+     int64_t mQueueLen;
